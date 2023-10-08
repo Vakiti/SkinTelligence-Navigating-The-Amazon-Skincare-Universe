@@ -1,0 +1,64 @@
+---
+title: "ARM_Apriori"
+author: "SrijaVakiti"
+date: "2023-10-08"
+output: html_document
+---
+
+-------------------------------------------------------------------------------------------------
+
+
+##ARM RULE GENERATION
+
+```{r}
+#install.packages("arules")
+library(arules)
+libra
+```
+
+
+```{r}
+transactions1_df <- read.transactions("https://raw.githubusercontent.com/Vakiti/SkinTelligence-Navigating-The-Amazon-Skincare-Universe/datasets/final_arm_transactional_df.csv", sep =",", 
+                                format("basket"),  rm.duplicates = TRUE)
+#inspect(transactions1_df)
+```
+
+```{r}
+trans_rules = arules::apriori(transactions1_df, 
+        parameter = list(support=0.01, conf=0.01, minlen=2))
+        #maxlen
+        #appearance = list (default="lhs",rhs="milk")
+print(inspect(trans_rules[1:15]))
+```
+
+
+```{r}
+# Display the top 15 rules
+top_15_rules1 <- head(rules, n = 15)
+```
+
+
+```{r}
+##  SOrt by Conf
+SortedRules_conf <- sort(trans_rules, by="confidence", decreasing=TRUE)
+inspect(SortedRules_conf[1:20])
+## Sort by Sup
+SortedRules_sup <- sort(trans_rules, by="support", decreasing=TRUE)
+inspect(SortedRules_sup[1:20])
+## Sort by Lift
+SortedRules_lift <- sort(trans_rules, by="lift", decreasing=TRUE)
+inspect(SortedRules_lift[1:20])
+
+```
+
+
+
+
+
+
+
+
+
+
+
+

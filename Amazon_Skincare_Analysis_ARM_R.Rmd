@@ -1,0 +1,378 @@
+---
+title: "Amazon_Skincare_Analysis_ARM_R"
+author: "SrijaVakiti"
+date: "2023-10-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Overview 
+
+During the cleaning process, it was observed that many of the product names did not match their names that were on their original sites. What can be the reason for this? Is this because Amazon tries to add in as many keywords as possible in the search box? There can be multiple reasons for variations in product names on Amazon.
+
+1) Data Aggregation from Multiple Sellers: Amazon often aggregates product listings from various sellers. Each seller may have their own product title, description, and even branding. This can result in variations in product names.
+
+2) User-Generated Content: On e-commerce platforms like Amazon, users (sellers) can create product listings. These listings may not always follow a standardized naming convention, leading to variations.
+
+3) Automatic Title Generation: In some cases, Amazon algorithms may automatically generate product titles based on the information provided by sellers. These algorithms may prioritize including relevant keywords for search engine optimization (SEO) purposes.
+
+The goal of this section is to go on an exploratory dive and perform ARM (Association Rule Mining) to see if there is a pattern that is followed in the product renaming convention used by Amazon.)
+
+ARM requires ONLY unlabeled transaction data. So we are first going to slice off the product_name column of the dataset and convert it into unlabeled transaction data. 
+
+-------------------------------------------------------------------------------------------------
+
+# DATA CLEANING AND PREP
+
+## Step 1: Importing data and creating base dataset
+
+```{r}
+#Loading dataset (replace 'your_dataset.csv' with the actual file path)
+productdf_v1 <- read.csv('https://raw.githubusercontent.com/Vakiti/SkinTelligence-Navigating-The-Amazon-Skincare-Universe/datasets/final_dataset.csv')
+#productdf_v1
+```
+
+```{r}
+# Load necessary libraries
+library(tokenizers)
+library(dplyr)
+library(tidytext)  # Load the tidytext package for unnesting
+
+# If you only have one column, you can specify the column name directly
+
+# Specify the column name where your product names are stored
+column_name <- "product_name"  # Replace with your actual column name
+
+# Filter out rows with missing or empty product names
+productdf_v1 <- productdf_v1 %>%
+  filter(!is.na(.[[column_name]]) & .[[column_name]] != "")
+```
+
+
+```{r}
+# Create a new dataset with only product names
+product_name_df <- data.frame(productdf_v1$product_name)
+
+product_name_df
+```
+
+```{r}
+# Load the dplyr package if not already loaded
+library(dplyr)
+
+# Rename the column
+product_name_df <- product_name_df %>%
+  rename(product_name = productdf_v1.product_name)
+product_name_df
+```
+
+-------------------------------------------------------------------------------------------------
+
+## Step 2: Data cleaning
+
+Since the data is still raw, it is important to check for unusual characters, encodings, or anomalies. We will perform the following checkings:
+
+* Check for Non-ASCII Characters
+* Check for Unusual Lengths
+* Check for Specific Anomalies 
+* Encoding Issues
+
+
+### * Check for Non-ASCII Characters
+
+```{r}
+# Check for non-ASCII characters in 'product_name'
+non_ascii_rows <- product_name_df[grepl("[^ -~]", product_name_df$product_name), ]
+#non_ascii_rows
+```
+There are 86 rows that contain non-ASCII characters. Let us correct them. 
+
+```{r}
+# Clean non-ASCII characters from 'product_name'
+product_name_df$product_name <- iconv(product_name_df$product_name, to = "ASCII", sub = "")
+
+# Check if there are still non-ASCII characters
+non_ascii_rows <- product_name_df[grepl("[^ -~]", product_name_df$product_name), ]
+
+non_ascii_rows
+```
+### * Check for Unusual Lengths
+
+```{r}
+# Check for unusually short 'product_name'
+short_names <- product_name_df[nchar(product_name_df$product_name) < 3, ]
+
+# Check for unusually long 'product_name'
+long_names <- product_name_df[nchar(product_name_df$product_name) > 100, ]
+```
+
+There are many products have have unusually long names. These do not have to be removed as that is what we will be looking into. 
+
+### * Check for Specific Anomalies
+
+```{r}
+# Check for product names with excessive spaces
+excessive_spaces <- product_name_df[grepl("\\s{2,}", product_name_df$product_name), ]
+#excessive_spaces
+```
+There are 31 rows that have excessive spaces and there is a need to replace multiple consecutive spaces with a single space.
+
+```{r}
+# Replace excessive spaces with a single space
+product_name_df$product_name <- gsub("\\s+", " ", product_name_df$product_name)
+```
+
+```{r}
+# Check for product names with excessive spaces
+excessive_spaces <- product_name_df[grepl("\\s{2,}", product_name_df$product_name), ]
+excessive_spaces
+```
+### * Check for Encoding Issues
+
+```{r}
+# Check the encoding of the 'product_name' column
+encodings <- sapply(product_name_df$product_name, Encoding)
+unique_encodings <- unique(encodings)
+unique_encodings
+```
+The output "unknown" suggests that the encoding for the 'product_name' column is not recognized. It's possible that the column contains a mix of different encodings or that it contains characters that are not encoded in a standard way.
+
+We can convert the column to UTF-8 encoding, which is a widely supported encoding for text data.
+
+```{r}
+library(stringi)
+```
+
+
+```{r}
+# Convert the product_name column to UTF-8 encoding
+product_name_df$product_name <- iconv(product_name_df$product_name, from = "latin1", to = "UTF-8")
+```
+
+-------------------------------------------------------------------------------------------------
+## Step 2: Converting this data into transaction data through tokenization where each product name is a transaction and each word should be in its own column
+
+```{r}
+# Load necessary libraries
+#install.packages("stopwords")
+#install.packages(tokenizers)
+#install.packages(dplyr)
+#install.packages(tidyr)
+#install.packages(arules) 
+#install.packages(tidytext)
+
+
+library(tidytext)
+library(stopwords)
+library(tokenizers)
+library(dplyr)
+library(tidyr)
+library(arules)  # Load the arules package for ARM
+```
+
+```{r}
+# Tokenize each product name and create a new dataframe
+tokenized_df <- product_name_df %>%
+  mutate(tokenized_column_name = tokenize_words(product_name,
+                                              stopwords = stopwords::stopwords("en"), 
+                                              lowercase = TRUE, 
+                                              strip_punct = TRUE, 
+                                              strip_numeric = TRUE,
+                                              simplify = FALSE)) %>%
+    unnest(tokenized_column_name)
+```
+
+
+```{r}
+library(dplyr)
+library(tokenizers)
+
+# Create an empty data frame to store tokenized words
+transactions_df <- data.frame()
+colnames(transactions_df) <- c('Tokens')
+# Iterate through each product name and tokenize
+for (i in 1:nrow(product_name_df)) {
+  print(i)
+  product_name <- product_name_df$product_name[i]
+  print(product_name)
+  tokens <- tokenize_words(product_name,
+                           stopwords = stopwords::stopwords("en"),
+                           lowercase = TRUE,
+                           strip_punct = TRUE,
+                           strip_numeric = TRUE,
+                           simplify = FALSE)
+  tokens <- paste(tokens, collapse = ",")
+  print(tokens)
+  transactions_df <- transaction_df %>% add_row(Tokens = tokens)
+}
+
+# Reset row names
+row.names(transactions_df) <- NULL
+```
+
+
+```{r}
+library(dplyr)
+library(tokenizers)
+library(tidyr)
+
+# Tokenize each product name and create a new dataframe
+tokenized_df <- product_name_df %>%
+  mutate(tokenized_column_name = tokenize_words(product_name,
+                                              stopwords = stopwords::stopwords("en"), 
+                                              lowercase = TRUE, 
+                                              strip_punct = TRUE, 
+                                              strip_numeric = TRUE,
+                                              simplify = FALSE))
+
+# Use pivot_longer to transform the data
+word_df <- tokenized_df %>%
+  select(-product_name) %>%
+  pivot_longer(cols = starts_with("tokenized_column_name"),
+               names_to = "word_column",
+               values_to = "word") %>%
+  select(-word_column) %>%
+  drop_na()
+
+# Reset row names
+row.names(word_df) <- NULL
+```
+
+```{r}
+library(dplyr)
+library(tokenizers)
+
+# Create an empty data frame to store tokenized words
+transactions_df <- data.frame(Tokens = character(0))
+
+# Iterate through each product name and tokenize
+for (i in 1:nrow(product_name_df)) {
+  #print(i)
+  product_name <- product_name_df$product_name[i]
+  #print(product_name)
+  tokens <- tokenize_words(product_name,
+                           stopwords = stopwords::stopwords("en"),
+                           lowercase = TRUE,
+                           strip_punct = TRUE,
+                           strip_numeric = TRUE,
+                           simplify = FALSE)
+  transactions_df <- bind_rows(transactions_df, data.frame(Tokens = paste(tokens, collapse = ",")))
+}
+
+# Reset row names
+row.names(transactions_df) <- NULL
+```
+
+```{r}
+#transactions_df
+```
+
+```{r}
+# Split the text in each row into separate columns
+transactions_df <- data.frame(do.call(rbind, strsplit(transactions_df$Tokens, ",")))
+
+# Rename the columns if needed (e.g., V1, V2, V3, ...)
+colnames(transactions_df) <- paste0("Word", 1:ncol(transactions_df))
+```
+
+```{r}
+# Remove special characters and double quotes from each column
+for (col in colnames(transactions_df)) {
+  transactions_df[[col]] <- gsub("[[:punct:]]|\"", "", transactions_df[[col]])
+}
+
+```
+
+
+```{r}
+# Write the transactions_df data frame to a CSV file
+write.csv(transactions_df, file = "arm_transactional_df.csv", row.names = FALSE)
+```
+
+```{r}
+# Check for duplicates in the data frame
+duplicates <- duplicated(transactions_df)
+
+# Subset the data frame to show only the duplicate rows
+duplicate_rows <- transactions_df[duplicates, ]
+
+# Print the duplicate rows
+print(duplicate_rows)
+```
+
+```{r}
+# Remove 'c' from the beginning of every row in the "Word1" column
+transactions_df$Word1 <- gsub('^c', '', transactions_df$Word1)
+
+# Print the modified data frame
+print(transactions_df)
+
+```
+
+```{r}
+# Write the transactions_df data frame to a CSV file
+write.csv(transactions_df, file = "final_arm_transactional_df.csv", row.names = FALSE)
+```
+
+
+-------------------------------------------------------------------------------------------------
+
+
+##ARM RULE GENERATION
+
+```{r}
+transactions1_df <- read.transactions("https://raw.githubusercontent.com/Vakiti/SkinTelligence-Navigating-The-Amazon-Skincare-Universe/datasets/final_arm_transactional_df.csv", sep =",", 
+                                format("basket"),  rm.duplicates = TRUE)
+inspect(transactions1_df)
+```
+
+```{r}
+trans_rules = arules::apriori(transactions1_df, 
+        parameter = list(support=0.001, conf=0.001, minlen=2))
+        #maxlen
+        #appearance = list (default="lhs",rhs="milk")
+inspect(trans_rules[1:20])
+```
+
+
+```{r}
+#loading library arules
+library(arules)
+
+#converting transactions_df to transactional data
+transactions <- as(transactions1_df, "transactions")
+
+#generating rules
+rules <- apriori(transactions, 
+                 parameter = list(support = 0.00000000001, confidence = 0.00000000005),
+                 control = list(verbose = FALSE))
+
+```
+
+```{r}
+# Display the top 15 rules
+top_15_rules1 <- head(rules, n = 15)
+```
+
+
+```{r}
+inspect(top_15_rules1)
+```
+
+
+```{r}
+##  SOrt by Conf
+SortedRules_conf <- sort(rules, by="confidence", decreasing=TRUE)
+inspect(SortedRules_conf[1:20])
+## Sort by Sup
+SortedRules_sup <- sort(rules, by="support", decreasing=TRUE)
+inspect(SortedRules_sup[1:20])
+## Sort by Lift
+SortedRules_lift <- sort(rules, by="lift", decreasing=TRUE)
+inspect(SortedRules_lift[1:20])
+
+```
+
