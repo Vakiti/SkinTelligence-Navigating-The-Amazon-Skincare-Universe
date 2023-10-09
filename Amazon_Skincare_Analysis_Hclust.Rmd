@@ -1,0 +1,71 @@
+---
+title: "Hclust"
+author: "SrijaVakiti"
+date: "2023-10-09"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+```
+
+
+```{r}
+num_df<-read.csv("https://raw.githubusercontent.com/Vakiti/SkinTelligence-Navigating-The-Amazon-Skincare-Universe/datasets/clustering_df.csv")
+num_df
+```
+```{r}
+# Load any necessary libraries (if not already loaded)
+#install.packages("proxy")
+library(proxy)
+
+# Assuming you have a DataFrame named num_df
+# num_df should contain the columns: price, rating, totalReviews, hybrid_feature1, and hybrid_feature2
+
+# Create a data matrix from the relevant columns
+data_matrix <- num_df[, c("price", "rating", "totalReviews")]
+
+# Calculate cosine distance between data points
+cosine_dist <- proxy::dist(as.matrix(data_matrix), method = "cosine")
+
+# Perform hierarchical clustering
+hclust_result <- hclust(cosine_dist, method = "complete")  # You can use "single", "complete", "average", etc.
+
+# Plot the hierarchical clustering dendrogram
+plot(hclust_result, hang = -1, cex = 0.6, main = "Hierarchical Clustering Dendrogram (Cosine Distance)")
+
+# To cut the tree into a certain number of clusters (e.g., 3 clusters)
+num_clusters <- 3
+clusters <- cutree(hclust_result, k = num_clusters)
+
+# Assign the cluster labels to your original DataFrame
+num_df$cluster <- clusters
+
+# View the resulting clusters
+print(num_df)
+
+```
+```{r}
+# Assuming you have a DataFrame named num_df
+# num_df should contain the columns: price, rating, totalReviews, hybrid_feature1, and hybrid_feature2
+
+# Set the size of the random subset (e.g., 20% of the data)
+subset_size <- floor(0.2 * nrow(num_df))  # Adjust the fraction as needed
+
+# Randomly sample rows from num_df
+subset_df <- num_df[sample(nrow(num_df), subset_size), ]
+
+# Create a data matrix from the relevant columns
+data_matrix <- subset_df[, c("price", "rating", "totalReviews")]
+
+# Calculate cosine distance between data points
+cosine_dist <- proxy::dist(as.matrix(data_matrix), method = "cosine")
+
+# Perform hierarchical clustering
+hclust_result <- hclust(cosine_dist, method = "complete")  # You can use "single", "complete", "average", etc.
+
+# Plot the hierarchical clustering dendrogram
+plot(hclust_result, hang = -1, cex = 0.6, main = "Hierarchical Clustering Zoomed Dendrogram (Cosine Distance)")
+
+```
+
